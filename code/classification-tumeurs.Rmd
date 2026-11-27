@@ -1,0 +1,139 @@
+
+---
+title: "Présentation de l'Analyse du Cancer du Sein"
+author: "Armand Ayebie"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+# Introduction
+
+Ce rapport présente une analyse du jeu de données sur le cancer du sein en utilisant un modèle de régression logistique. L'objectif principal est de distinguer entre les tumeurs bénignes et malignes en fonction de diverses caractéristiques. Les sections suivantes détaillent les étapes de prétraitement des données, de formation du modèle et d'évaluation.
+Le cancer du sein est l'un des cancers les plus fréquents et les plus graves touchant les femmes dans le monde entier. Selon les statistiques de 2015, plus de 2,1 millions de femmes ont été diagnostiquées avec cette maladie, représentant environ 25 % des cas mondiaux de cancer. Le principal défi dans le diagnostic du cancer du sein réside dans la capacité à classifier correctement les tumeurs en deux catégories : bénignes (non cancéreuses) et malignes (cancéreuses). Une classification précise est essentielle pour déterminer le traitement approprié et améliorer les chances de survie des patientes.
+
+# Prétraitement des Données
+
+```{r load-libraries, message=FALSE, warning=FALSE}
+# Charger les bibliothèques nécessaires
+library(tidyverse)
+library(caret)
+library(e1071)
+library(ggplot2)
+library(mlbench)
+library(randomForest)
+library(corrplot)
+library(ROCR)
+library(pROC)
+```
+
+```{r load-data}
+# Charger le jeu de données
+cancer <- read.csv("breast-cancer.csv", sep = ",", header = TRUE)
+# Nettoyage des données
+cancer <- na.omit(cancer)
+cancer <- cancer %>% select(-id)
+cancer$diagnosis <- as.factor(ifelse(cancer$diagnosis == "M", 1, 0))
+```
+
+## Résumé des Données
+
+```{r data-summary}
+summary(cancer)
+str(cancer)
+head(cancer)
+```
+
+## Visualisation des Données
+
+### Matrice de Corrélation
+
+```{r correlation-matrix, fig.width=8, fig.height=6}
+# Matrice de corrélation pour les variables numériques
+cor_matrix <- cor(cancer[, sapply(cancer, is.numeric)], use = "complete.obs")
+corrplot(cor_matrix, method = "color", type = "upper", tl.cex = 0.7, tl.col = "black")
+```
+
+### Distribution du Diagnostic
+
+```{r diagnosis-distribution, fig.width=6, fig.height=4}
+ggplot(cancer, aes(x = diagnosis)) + 
+  geom_bar(fill = "skyblue") + 
+  ggtitle("Distribution des Types de Cancer (Bénin vs Malin)")
+```
+
+### Taille de la Tumeur vs Texture
+
+```{r size-vs-texture, fig.width=6, fig.height=4}
+ggplot(cancer, aes(x = radius_mean, y = texture_mean, color = diagnosis)) +
+  geom_point() +
+  ggtitle("Relation entre la Taille et la Texture des Tumeurs")
+```
+
+# Entraînement du Modèle
+
+Nous avons entraîné un modèle de régression logistique pour classifier les tumeurs en fonction des caractéristiques disponibles.
+
+## Séparation des Données
+
+```{r data-splitting}
+# Division des données en ensembles d'entraînement et de test (80% - 20%)
+set.seed(123)
+index <- createDataPartition(cancer$diagnosis, p = 0.8, list = FALSE)
+train_cancer <- cancer[index, ]
+test_cancer <- cancer[-index, ]
+dim(train_cancer)
+dim(test_cancer)
+```
+
+## Construction du Modèle
+
+```{r logistic-model}
+# Construction du modèle de régression logistique
+model <- glm(diagnosis ~ ., data = train_cancer, family = binomial)
+summary(model)
+```
+
+# Évaluation du Modèle
+
+## Prédictions et Matrice de Confusion
+
+```{r predictions, fig.width=6, fig.height=4}
+# Prédictions
+predictions_prob <- predict(model, newdata = test_cancer, type = "response")
+threshold <- 0.5
+predictions_class <- ifelse(predictions_prob > threshold, 1, 0)
+
+# Matrice de confusion
+confusion <- confusionMatrix(as.factor(predictions_class), as.factor(test_cancer$diagnosis))
+confusion
+```
+
+### Principales Métriques
+
+```{r key-metrics}
+# Précision, Rappel, et Exactitude
+accuracy <- confusion$overall["Accuracy"]
+precision <- confusion$byClass["Pos Pred Value"]
+recall <- confusion$byClass["Sensitivity"]
+cat("Exactitude:", accuracy, "\\n")
+cat("Précision:", precision, "\\n")
+cat("Rappel:", recall, "\\n")
+```
+
+## Courbe ROC et AUC
+
+```{r roc-curve, fig.width=6, fig.height=6}
+# Courbe ROC et AUC
+roc_curve <- roc(test_cancer$diagnosis, predictions_prob)
+auc_value <- auc(roc_curve)
+plot(roc_curve, main = paste("Courbe ROC - AUC:", round(auc_value, 2)))
+cat("AUC:", auc_value, "\\n")
+```
+
+# Conclusion
+
+Le modèle de régression logistique a bien performé pour la classification des tumeurs malignes et bénignes avec une valeur AUC de `r round(auc_value, 2)`. Les principales métriques obtenues à partir de la matrice de confusion montrent l'efficacité du modèle, ce qui en fait une méthode fiable pour prédire les diagnostics de cancer du sein.
+Néanmoins, bien que les résultats soient prometteurs, des améliorations peuvent encore être apportées en optimisant les hyperparamètres du modèle ou en essayant d'autres techniques de classification pour voir si elles offrent de meilleures performances. En conclusion, l'utilisation de l'apprentissage automatique dans le diagnostic du cancer du sein représente une avancée significative pour la détection précoce et l'amélioration des traitements, contribuant ainsi à sauver des vies.
+```
